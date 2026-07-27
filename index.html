@@ -732,7 +732,7 @@
       <div class="filterBar" id="filterBar" style="display: none">
         <label class="searchField">
           <span>⌕</span>
-          <input id="search" type="search" placeholder="Buscar conferente, placa ou fornecedor" aria-label="Buscar registros">
+          <input id="search" type="search" placeholder="Buscar conferente, placa, portão ou fornecedor" aria-label="Buscar registros">
         </label>
         <label>
           <select id="shiftFilter" aria-label="Filtrar por turno">
@@ -805,6 +805,7 @@
                 <label class="field"><span>Turno <b>*</b></span><select name="shift" required><option value="">Selecione</option><option value="1">Turno 1</option><option value="2">Turno 2</option><option value="3">Turno 3</option></select></label>
                 <label class="field"><span>Tipo de recebimento <b>*</b></span><select name="receiptType" required><option value="">Selecione</option><option>NACIONAL</option><option>IMPORTADO</option></select></label>
                 <label class="field"><span>Almoxarifado <b>*</b></span><select name="warehouse" required><option value="">Selecione</option><option>PRODUTIVO</option><option>INDIRETO</option></select></label>
+                <label class="field wide"><span>Portão de recebimento <b>*</b></span><select name="receivingGate" required><option value="">Selecione</option><option>101</option><option>105</option><option>201</option><option>205</option></select></label>
               </div>
             </section>
 
@@ -894,6 +895,7 @@
             "shift",
             "receiptType",
             "warehouse",
+            "receivingGate",
             "invoiceStatus",
             "supplier",
             "carrier",
@@ -1058,7 +1060,7 @@
       const shift = document.getElementById("shiftFilter").value;
       const type = document.getElementById("typeFilter").value;
       return receipts.filter(receipt => {
-        const searchable = [receipt.inspectorName, receipt.supplier, receipt.carrier, receipt.vehiclePlate]
+        const searchable = [receipt.inspectorName, receipt.supplier, receipt.carrier, receipt.vehiclePlate, receipt.receivingGate]
           .join(" ")
           .toLocaleLowerCase("pt-BR");
         return (!term || searchable.includes(term))
@@ -1118,10 +1120,10 @@
 
     function buildTable(rows, removable) {
       if (!rows.length) return '<div class="tableState">Nenhum recebimento encontrado. Altere os filtros ou registre uma nova entrada.</div>';
-      return '<div class="tableWrap"><table><thead><tr><th>Data</th><th>Conferente</th><th>Placa</th><th>Transportadora</th><th>Volumes</th><th>Tempo</th><th>Status</th>' + (removable ? '<th>Ações</th>' : '') + '</tr></thead><tbody>' + rows.map(row => {
+      return '<div class="tableWrap"><table><thead><tr><th>Data</th><th>Conferente</th><th>Placa</th><th>Portão</th><th>Transportadora</th><th>Volumes</th><th>Tempo</th><th>Status</th>' + (removable ? '<th>Ações</th>' : '') + '</tr></thead><tbody>' + rows.map(row => {
         const anomaly = Boolean(String(row.anomalyComments || "").trim());
         const duration = minutesBetween(row.unloadStart, row.unloadEnd);
-        return '<tr><td data-label="DATA">' + escapeHtml(formatDate(row.createdAt)) + '</td><td data-label="CONFERENTE"><div class="personCell"><span class="avatar">' + escapeHtml(row.inspectorName.charAt(0).toUpperCase()) + '</span><div><strong>' + escapeHtml(row.inspectorName) + '</strong><small>Chapa ' + escapeHtml(row.badge) + '</small></div></div></td><td data-label="PLACA"><strong class="plate">' + escapeHtml(row.vehiclePlate) + '</strong></td><td data-label="TRANSPORTADORA">' + escapeHtml(row.carrier) + '</td><td data-label="VOLUMES">' + escapeHtml(row.totalVolumes) + '</td><td data-label="TEMPO">' + duration + ' min</td><td data-label="STATUS"><span class="status ' + (anomaly ? 'anomaly' : 'complete') + '"><i></i>' + (anomaly ? 'Anomalia' : 'Concluído') + '</span></td>' + (removable ? '<td data-label="AÇÃO"><button class="deleteButton" type="button" aria-label="Excluir registro" onclick="removeReceipt(' + row.id + ')">×</button></td>' : '') + '</tr>';
+        return '<tr><td data-label="DATA">' + escapeHtml(formatDate(row.createdAt)) + '</td><td data-label="CONFERENTE"><div class="personCell"><span class="avatar">' + escapeHtml(row.inspectorName.charAt(0).toUpperCase()) + '</span><div><strong>' + escapeHtml(row.inspectorName) + '</strong><small>Chapa ' + escapeHtml(row.badge) + '</small></div></div></td><td data-label="PLACA"><strong class="plate">' + escapeHtml(row.vehiclePlate) + '</strong></td><td data-label="PORTÃO"><strong>' + escapeHtml(row.receivingGate || "NÃO INFORMADO") + '</strong></td><td data-label="TRANSPORTADORA">' + escapeHtml(row.carrier) + '</td><td data-label="VOLUMES">' + escapeHtml(row.totalVolumes) + '</td><td data-label="TEMPO">' + duration + ' min</td><td data-label="STATUS"><span class="status ' + (anomaly ? 'anomaly' : 'complete') + '"><i></i>' + (anomaly ? 'Anomalia' : 'Concluído') + '</span></td>' + (removable ? '<td data-label="AÇÃO"><button class="deleteButton" type="button" aria-label="Excluir registro" onclick="removeReceipt(' + row.id + ')">×</button></td>' : '') + '</tr>';
       }).join("") + '</tbody></table></div>';
     }
 
@@ -1207,8 +1209,9 @@
         { label: "DATA", x: 100 },
         { label: "CONFERENTE", x: 270 },
         { label: "PLACA", x: 590 },
-        { label: "TRANSPORTADORA", x: 760 },
-        { label: "VOLUMES", x: 1100 },
+        { label: "PORTÃO", x: 720 },
+        { label: "TRANSPORTADORA", x: 840 },
+        { label: "VOLUMES", x: 1130 },
         { label: "TEMPO", x: 1265 },
         { label: "STATUS", x: 1405 }
       ];
@@ -1230,14 +1233,15 @@
           new Intl.DateTimeFormat("pt-BR").format(new Date(row.createdAt)),
           row.inspectorName.slice(0, 24).toLocaleUpperCase("pt-BR"),
           row.vehiclePlate.toLocaleUpperCase("pt-BR"),
-          row.carrier.slice(0, 22).toLocaleUpperCase("pt-BR"),
+          String(row.receivingGate || "NÃO INFORMADO"),
+          row.carrier.slice(0, 18).toLocaleUpperCase("pt-BR"),
           String(row.totalVolumes),
           minutesBetween(row.unloadStart, row.unloadEnd) + " MIN",
           status
         ];
         ctx.font = "500 17px Poppins, Arial";
         values.forEach((value, valueIndex) => {
-          ctx.fillStyle = valueIndex === 6 ? (status === "ANOMALIA" ? "#d94e4e" : "#14946d") : "#20364d";
+          ctx.fillStyle = valueIndex === 7 ? (status === "ANOMALIA" ? "#d94e4e" : "#14946d") : "#20364d";
           ctx.fillText(value, columns[valueIndex].x, y);
         });
       });
@@ -1316,6 +1320,7 @@
         "TURNO",
         "TIPO DE RECEBIMENTO",
         "ALMOXARIFADO",
+        "PORTÃO DE RECEBIMENTO",
         "NOTA FISCAL",
         "FORNECEDOR",
         "TRANSPORTADORA",
@@ -1342,6 +1347,7 @@
           "TURNO " + row.shift,
           row.receiptType,
           row.warehouse,
+          row.receivingGate || "",
           row.invoiceStatus,
           row.supplier,
           row.carrier,
@@ -1366,8 +1372,8 @@
       const headerXml = "<Row>" + headers.map(value => excelCell(value, "String", "Header")).join("") + "</Row>";
       const recordsXml = recordRows.map(row => {
         return "<Row>" + row.map((value, index) => {
-          const isNumber = index === 12 || index === 16;
-          return excelCell(value, isNumber ? "Number" : "String", index === 17 && value === "ANOMALIA" ? "Anomaly" : "");
+          const isNumber = index === 13 || index === 17;
+          return excelCell(value, isNumber ? "Number" : "String", index === 18 && value === "ANOMALIA" ? "Anomaly" : "");
         }).join("") + "</Row>";
       }).join("");
 
@@ -1389,7 +1395,7 @@
         + summaryXml
         + '</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane></WorksheetOptions></Worksheet>'
         + '<Worksheet ss:Name="REGISTROS"><Table>'
-        + headers.map((header, index) => '<Column ss:Width="' + ([90, 95, 80, 210, 80, 80, 135, 115, 95, 180, 145, 90, 75, 105, 115, 125, 170, 90, 280][index]) + '"/>').join("")
+        + headers.map((header, index) => '<Column ss:Width="' + ([90, 95, 80, 210, 80, 80, 135, 115, 135, 95, 180, 145, 90, 75, 105, 115, 125, 170, 90, 280][index]) + '"/>').join("")
         + headerXml + recordsXml
         + '</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><FilterOn/></WorksheetOptions><AutoFilter x:Range="R1C1:R' + (recordRows.length + 1) + 'C' + headers.length + '" xmlns="urn:schemas-microsoft-com:office:excel"/></Worksheet>'
         + '</Workbook>';
