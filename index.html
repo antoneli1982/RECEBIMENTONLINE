@@ -203,7 +203,7 @@
     }
 
     .topbar h1 { margin: 0; font-size: clamp(21px, 2vw, 28px); letter-spacing: -.03em; }
-    .topbarActions { display: flex; align-items: center; gap: 12px; }
+    .topbarActions { position: relative; display: flex; align-items: center; gap: 12px; }
     .button {
       min-height: 46px;
       display: inline-flex;
@@ -229,7 +229,7 @@
 
     .button.primary:hover { border-color: var(--blue); background: var(--blue); }
     .button.danger { color: var(--danger); }
-    .menuButton, .closeMenu, .menuBackdrop { display: none; }
+    .menuButton, .closeMenu, .menuBackdrop, .mobileActionsToggle, .mobileActionsMenu { display: none; }
     .notice {
       display: none;
       align-items: center;
@@ -583,7 +583,9 @@
     body.darkTheme .button:not(.primary),
     body.darkTheme .filterBar select,
     body.darkTheme .searchField,
-    body.darkTheme .menuButton {
+    body.darkTheme .menuButton,
+    body.darkTheme .mobileActionsToggle,
+    body.darkTheme .mobileActionsMenu {
       background: var(--paper);
       color: var(--ink);
     }
@@ -646,12 +648,61 @@
       .closeMenu { position: absolute; top: 14px; right: 14px; z-index: 2; }
       .menuBackdrop.show { position: fixed; inset: 0; z-index: 20; display: block; border: 0; background: rgba(4, 17, 31, .58); }
       .topbar { position: sticky; top: 0; z-index: 18; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; padding: 16px; }
-      .topbar h1 { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+      .topbar h1 {
+        overflow: visible;
+        font-size: 15px;
+        line-height: 1.15;
+        text-overflow: clip;
+        white-space: normal;
+      }
       .eyebrow { font-size: 8px; }
-      .topbarActions { width: auto; display: flex; gap: 6px; }
-      .topbarActions .button { width: 42px; min-width: 42px; padding: 0; overflow: hidden; font-size: 0; }
-      .topbarActions .button::first-letter { font-size: 18px; }
-      .topbarActions .button.primary { display: none; }
+      .topbarActions { width: auto; display: block; }
+      .topbarActions > .button { display: none; }
+      .mobileActionsToggle {
+        width: 72px;
+        min-height: 46px;
+        display: grid;
+        grid-template-columns: auto auto;
+        place-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--ink);
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .mobileActionsToggle span { color: var(--cyan); font-size: 21px; line-height: 1; }
+      .mobileActionsMenu {
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        width: min(270px, calc(100vw - 32px));
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        box-shadow: 0 18px 46px rgba(0, 0, 0, .24);
+      }
+      .mobileActionsMenu.show { display: grid; }
+      .mobileActionsMenu button {
+        min-height: 54px;
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        align-items: center;
+        gap: 10px;
+        padding: 0 16px;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        background: transparent;
+        color: var(--ink);
+        font-size: 11px;
+        font-weight: 600;
+        text-align: left;
+      }
+      .mobileActionsMenu button:last-child { border-bottom: 0; }
+      .mobileActionsMenu button:active { background: var(--cyanSoft); }
+      .mobileActionsMenu button span:first-child { color: var(--cyan); font-size: 20px; text-align: center; }
       .filterBar { flex-wrap: wrap; gap: 9px; padding: 14px 16px; }
       .searchField { max-width: none; flex-basis: 100%; }
       .filterBar label:not(.searchField) { flex: 1; }
@@ -733,7 +784,7 @@
     <section class="mainPanel">
       <header class="topbar">
         <button class="menuButton" type="button" aria-label="Abrir menu" onclick="openMenu()">☰</button>
-        <div>
+        <div class="topbarTitle">
           <p class="eyebrow">CONTROLE OPERACIONAL</p>
           <h1 id="pageTitle">Novo recebimento</h1>
         </div>
@@ -742,6 +793,24 @@
           <button class="button" type="button" onclick="downloadExcel()">▦ Exportar Excel</button>
           <button class="button" type="button" onclick="downloadReport()">↓ Gerar relatório JPEG</button>
           <button class="button primary" type="button" onclick="changeView('form')">＋ Novo recebimento</button>
+          <button class="mobileActionsToggle" id="mobileActionsToggle" type="button" aria-label="Abrir ações" aria-haspopup="true" aria-expanded="false" onclick="toggleMobileActions(event)">
+            <span>⋮</span>
+            AÇÕES
+          </button>
+          <div class="mobileActionsMenu" id="mobileActionsMenu" role="menu" aria-label="Ações rápidas">
+            <button id="mobileThemeToggle" type="button" role="menuitem" onclick="toggleTheme(); closeMobileActions()">
+              <span>☀</span>
+              <span id="mobileThemeLabel">COR CLARA</span>
+            </button>
+            <button type="button" role="menuitem" onclick="closeMobileActions(); downloadExcel()">
+              <span>▦</span>
+              <span>EXPORTAR EXCEL</span>
+            </button>
+            <button type="button" role="menuitem" onclick="closeMobileActions(); downloadReport()">
+              <span>↓</span>
+              <span>GERAR RELATÓRIO JPEG</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -946,6 +1015,10 @@
       document.documentElement.style.colorScheme = isDark ? "dark" : "light";
       const button = document.getElementById("themeToggle");
       if (button) button.textContent = isDark ? "☀ COR CLARA" : "◐ COR ESCURA";
+      const mobileThemeIcon = document.querySelector("#mobileThemeToggle span:first-child");
+      const mobileThemeLabel = document.getElementById("mobileThemeLabel");
+      if (mobileThemeIcon) mobileThemeIcon.textContent = isDark ? "☀" : "◐";
+      if (mobileThemeLabel) mobileThemeLabel.textContent = isDark ? "COR CLARA" : "COR ESCURA";
       document.querySelector('meta[name="theme-color"]').setAttribute("content", isDark ? "#040a11" : "#f3f6fa");
     }
 
@@ -1060,6 +1133,21 @@
       document.getElementById("menuBackdrop").classList.remove("show");
     }
 
+    function toggleMobileActions(event) {
+      if (event) event.stopPropagation();
+      const menu = document.getElementById("mobileActionsMenu");
+      const button = document.getElementById("mobileActionsToggle");
+      const isOpen = menu.classList.toggle("show");
+      button.setAttribute("aria-expanded", String(isOpen));
+    }
+
+    function closeMobileActions() {
+      const menu = document.getElementById("mobileActionsMenu");
+      const button = document.getElementById("mobileActionsToggle");
+      if (menu) menu.classList.remove("show");
+      if (button) button.setAttribute("aria-expanded", "false");
+    }
+
     function changeView(view) {
       currentView = view;
       document.querySelectorAll(".view").forEach(element => element.classList.remove("active"));
@@ -1069,6 +1157,7 @@
       document.getElementById("pageTitle").textContent = titles[view];
       document.getElementById("filterBar").style.display = view === "form" ? "none" : "";
       closeMenu();
+      closeMobileActions();
       render();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -1430,6 +1519,14 @@
     });
     document.querySelectorAll("[data-mobile-view]").forEach(button => {
       button.addEventListener("click", () => changeView(button.dataset.mobileView));
+    });
+
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".topbarActions")) closeMobileActions();
+    });
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") closeMobileActions();
     });
 
     document.querySelectorAll(".timeInput").forEach(input => {
