@@ -252,7 +252,8 @@
     }
 
     .filterBar {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(135px, 1fr)) repeat(2, minmax(160px, .8fr));
       align-items: center;
       gap: 12px;
       padding: 22px clamp(28px, 4vw, 64px);
@@ -260,16 +261,16 @@
       background: rgba(255, 255, 255, .68);
     }
 
+    .filterBar > label { min-width: 0; }
     .filterBar select, .searchField {
+      width: 100%;
       height: 44px;
       border: 1px solid var(--line);
       background: white;
     }
 
-    .filterBar select { min-width: 180px; padding: 0 36px 0 14px; color: var(--inkSoft); font-size: 12px; }
+    .filterBar select { min-width: 0; padding: 0 36px 0 14px; color: var(--inkSoft); font-size: 12px; }
     .searchField {
-      max-width: 460px;
-      flex: 1;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -608,6 +609,7 @@
     body.darkTheme .status.anomaly { background: #3d2025; }
 
     @media (max-width: 1100px) {
+      .filterBar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .metricGrid { grid-template-columns: repeat(2, 1fr); }
       .dashboardGrid { grid-template-columns: 1fr; }
       .heroPanel { grid-template-columns: 1fr; }
@@ -629,10 +631,7 @@
       .topbarActions .button { width: 42px; min-width: 42px; padding: 0; overflow: hidden; font-size: 0; }
       .topbarActions .button::first-letter { font-size: 18px; }
       .topbarActions .button.primary { display: none; }
-      .filterBar { flex-wrap: wrap; gap: 9px; padding: 14px 16px; }
-      .searchField { max-width: none; flex-basis: 100%; }
-      .filterBar label:not(.searchField) { flex: 1; }
-      .filterBar select { width: 100%; min-width: 0; }
+      .filterBar { grid-template-columns: 1fr 1fr; gap: 9px; padding: 14px 16px; }
       .filterBar select, .searchField { height: 48px; }
       .filterBar select, .searchField input, .field input, .field select, .field textarea { font-size: 16px; }
       .pageContent { padding: 18px 16px 28px; }
@@ -732,7 +731,19 @@
       <div class="filterBar" id="filterBar" style="display: none">
         <label class="searchField">
           <span>⌕</span>
-          <input id="search" type="search" placeholder="Buscar conferente, placa, portão ou fornecedor" aria-label="Buscar registros">
+          <input id="gateSearch" type="search" placeholder="PORTÃO" aria-label="Buscar por portão">
+        </label>
+        <label class="searchField">
+          <span>⌕</span>
+          <input id="supplierSearch" type="search" placeholder="FORNECEDOR" aria-label="Buscar por fornecedor">
+        </label>
+        <label class="searchField">
+          <span>⌕</span>
+          <input id="carrierSearch" type="search" placeholder="TRANSPORTADORA" aria-label="Buscar por transportadora">
+        </label>
+        <label class="searchField">
+          <span>⌕</span>
+          <input id="inspectorSearch" type="search" placeholder="CONFERENTE" aria-label="Buscar por conferente">
         </label>
         <label>
           <select id="shiftFilter" aria-label="Filtrar por turno">
@@ -1056,14 +1067,21 @@
     }
 
     function getFilteredReceipts() {
-      const term = document.getElementById("search").value.trim().toLocaleLowerCase("pt-BR");
+      const gateTerm = document.getElementById("gateSearch").value.trim().toLocaleLowerCase("pt-BR");
+      const supplierTerm = document.getElementById("supplierSearch").value.trim().toLocaleLowerCase("pt-BR");
+      const carrierTerm = document.getElementById("carrierSearch").value.trim().toLocaleLowerCase("pt-BR");
+      const inspectorTerm = document.getElementById("inspectorSearch").value.trim().toLocaleLowerCase("pt-BR");
       const shift = document.getElementById("shiftFilter").value;
       const type = document.getElementById("typeFilter").value;
       return receipts.filter(receipt => {
-        const searchable = [receipt.inspectorName, receipt.supplier, receipt.carrier, receipt.vehiclePlate, receipt.receivingGate]
-          .join(" ")
-          .toLocaleLowerCase("pt-BR");
-        return (!term || searchable.includes(term))
+        const gate = String(receipt.receivingGate || "").toLocaleLowerCase("pt-BR");
+        const supplier = String(receipt.supplier || "").toLocaleLowerCase("pt-BR");
+        const carrier = String(receipt.carrier || "").toLocaleLowerCase("pt-BR");
+        const inspector = String(receipt.inspectorName || "").toLocaleLowerCase("pt-BR");
+        return (!gateTerm || gate.includes(gateTerm))
+          && (!supplierTerm || supplier.includes(supplierTerm))
+          && (!carrierTerm || carrier.includes(carrierTerm))
+          && (!inspectorTerm || inspector.includes(inspectorTerm))
           && (shift === "TODOS" || receipt.shift === shift)
           && (type === "TODOS" || receipt.receiptType === type);
       });
@@ -1434,9 +1452,11 @@
       });
     });
 
-    document.getElementById("search").addEventListener("input", event => {
-      event.target.value = event.target.value.toLocaleUpperCase("pt-BR");
-      render();
+    ["gateSearch", "supplierSearch", "carrierSearch", "inspectorSearch"].forEach(id => {
+      document.getElementById(id).addEventListener("input", event => {
+        event.target.value = event.target.value.toLocaleUpperCase("pt-BR");
+        render();
+      });
     });
     document.getElementById("shiftFilter").addEventListener("change", render);
     document.getElementById("typeFilter").addEventListener("change", render);
