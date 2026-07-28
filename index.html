@@ -738,6 +738,19 @@
 
     .field textarea { min-height: 110px; padding-top: 14px; resize: vertical; }
     .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--cyan); outline: 0; box-shadow: 0 0 0 3px rgba(0, 166, 223, .1); }
+    .field.hasError > span { color: #c92f2f; }
+    .field input.fieldError, .field select.fieldError, .field textarea.fieldError {
+      border: 2px solid #d93636;
+      background: #fff6f6;
+      box-shadow: 0 0 0 3px rgba(217, 54, 54, .14);
+    }
+    .field.hasError::after {
+      content: "CAMPO OBRIGATÓRIO";
+      color: #c92f2f;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
     .choiceGroup { display: flex; flex-wrap: wrap; gap: 8px; }
     .choice {
       min-height: 44px;
@@ -1143,7 +1156,7 @@
             <p id="formDescription">Preencha as informações do recebimento. Os campos marcados são obrigatórios.</p>
           </section>
 
-          <form class="receiptForm" id="receiptForm">
+          <form class="receiptForm" id="receiptForm" novalidate>
             <section class="formSection">
               <div class="formSectionHeader"><span>01</span><div><h3>Identificação da operação</h3><p>Dados do conferente e classificação do recebimento.</p></div></div>
               <div class="formGrid">
@@ -1272,9 +1285,18 @@
       messagingSenderId: "285253100082",
       appId: "1:285253100082:web:d51919c5a38f73ba39d22b"
     };
-    firebase.initializeApp(firebaseConfig);
-    const firestore = firebase.firestore();
-    const firestoreReceipts = firestore.collection("recebimentos");
+    let firestore = null;
+    let firestoreReceipts = null;
+    try {
+      if (window.firebase && typeof window.firebase.initializeApp === "function") {
+        window.firebase.initializeApp(firebaseConfig);
+        firestore = window.firebase.firestore();
+        firestoreReceipts = firestore.collection("recebimentos");
+      }
+    } catch {
+      firestore = null;
+      firestoreReceipts = null;
+    }
     const titles = {
       dashboard: "Recebimento de veículos",
       form: "Novo recebimento",
@@ -1283,12 +1305,38 @@
 
     let currentView = "form";
     let editingReceiptId = null;
+    function storageGet(key) {
+      try {
+        return window.localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function storageSet(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function storageRemove(key) {
+      try {
+        window.localStorage.removeItem(key);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     let receipts = loadReceipts();
-    applyTheme(localStorage.getItem(themeKey) === "light" ? "light" : "dark");
+    applyTheme(storageGet(themeKey) === "light" ? "light" : "dark");
 
     function loadReceipts() {
       try {
-        const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        const saved = JSON.parse(storageGet(storageKey) || "[]");
         if (!Array.isArray(saved)) return [];
         return saved.map(row => {
           const normalized = { ...row, factory: "SESÉ" };
@@ -1329,12 +1377,12 @@
 
     function toggleTheme() {
       const nextTheme = document.body.classList.contains("darkTheme") ? "light" : "dark";
-      localStorage.setItem(themeKey, nextTheme);
+      storageSet(themeKey, nextTheme);
       applyTheme(nextTheme);
     }
 
     function persistReceipts() {
-      localStorage.setItem(storageKey, JSON.stringify(receipts));
+      return storageSet(storageKey, JSON.stringify(receipts));
     }
 
     function updateSyncStatus(message, error) {
@@ -1345,6 +1393,11 @@
     }
 
     async function initFirebaseSync() {
+      if (!firestore || !firestoreReceipts) {
+        updateSyncStatus("Dados locais ativos neste aparelho", true);
+        render();
+        return;
+      }
       updateSyncStatus("Conectando ao Firebase", false);
       try {
         try {
@@ -1356,8 +1409,8 @@
         firestoreReceipts.orderBy("createdAt", "desc").onSnapshot(async snapshot => {
           updateSyncStatus("Dados sincronizados", false);
 
-          if (snapshot.empty && receipts.length && localStorage.getItem(migrationKey) !== "concluido") {
-            localStorage.setItem(migrationKey, "concluido");
+          if (snapshot.empty && receipts.length && storageGet(migrationKey) !== "concluido") {
+            storageSet(migrationKey, "concluido");
             const batch = firestore.batch();
             receipts.forEach(row => {
               const documentId = String(row.id || Date.now() + Math.random());
@@ -1383,12 +1436,12 @@
     }
 
     function escapeHtml(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     function normalizeTime(value) {
@@ -1575,12 +1628,12 @@
     }
 
     function escapeExcelXml(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&apos;");
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
     }
 
     function excelCell(value, type, style) {
@@ -1691,7 +1744,7 @@
       const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
       const link = document.createElement("a");
       const now = new Date();
-      const dateCode = now.toISOString().slice(0, 10).replaceAll("-", "");
+      const dateCode = now.toISOString().slice(0, 10).replace(/-/g, "");
       const timeCode = String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0");
       link.download = "recebimentos_sese_" + dateCode + "_" + timeCode + ".xls";
       link.href = URL.createObjectURL(blob);
@@ -1728,7 +1781,7 @@
         "anomalyComments"
       ];
       fields.forEach(name => {
-        if (form.elements[name]) form.elements[name].value = row[name] ?? "";
+        if (form.elements[name]) form.elements[name].value = row[name] == null ? "" : row[name];
       });
 
       const standardCarriers = [...carrierSelect.options].map(option => option.value);
@@ -1751,6 +1804,11 @@
     function resetReceiptForm() {
       const form = document.getElementById("receiptForm");
       form.reset();
+      form.querySelectorAll(".fieldError").forEach(field => {
+        field.classList.remove("fieldError");
+        field.removeAttribute("aria-invalid");
+      });
+      form.querySelectorAll(".field.hasError").forEach(field => field.classList.remove("hasError"));
       editingReceiptId = null;
       customCarrierField.hidden = true;
       customCarrierInput.required = false;
@@ -1760,7 +1818,7 @@
       document.getElementById("submitReceiptButton").textContent = "Registrar recebimento →";
       document.getElementById("cancelFormButton").textContent = "Cancelar";
 
-      const saved = localStorage.getItem(savedBadgeKey) || "";
+      const saved = storageGet(savedBadgeKey) || "";
       if (saved) {
         badgeInput.value = saved;
         keepBadge.checked = true;
@@ -1787,12 +1845,16 @@
       if (editingReceiptId === documentId) resetReceiptForm();
       persistReceipts();
       render();
-      firestoreReceipts.doc(documentId).delete()
-        .then(() => showNotice("Registro excluído e sincronizado."))
-        .catch(() => {
-          updateSyncStatus("Falha ao sincronizar a exclusão", true);
-          showNotice("Registro excluído neste aparelho. Verifique a conexão.");
-        });
+      if (firestoreReceipts) {
+        firestoreReceipts.doc(documentId).delete()
+          .then(() => showNotice("Registro excluído e sincronizado."))
+          .catch(() => {
+            updateSyncStatus("Falha ao sincronizar a exclusão", true);
+            showNotice("Registro excluído neste aparelho. Verifique a conexão.");
+          });
+      } else {
+        showNotice("Registro excluído neste aparelho.");
+      }
     }
 
     async function downloadReport() {
@@ -1914,7 +1976,7 @@
       ctx.fillText("SESE  •  LOGÍSTICA CONECTADA E HUMANA", 1528, footerY + 52);
 
       const link = document.createElement("a");
-      const dateCode = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+      const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       link.download = "relatorio_global_recebimentos_" + dateCode + ".jpg";
       link.href = canvas.toDataURL("image/jpeg", .94);
       document.body.appendChild(link);
@@ -1964,7 +2026,7 @@
     const carrierSelect = document.getElementById("carrierSelect");
     const customCarrierField = document.getElementById("customCarrierField");
     const customCarrierInput = document.getElementById("customCarrierInput");
-    const savedBadge = localStorage.getItem(savedBadgeKey) || "";
+    const savedBadge = storageGet(savedBadgeKey) || "";
 
     if (savedBadge) {
       badgeInput.value = savedBadge;
@@ -1974,9 +2036,9 @@
     keepBadge.addEventListener("change", () => {
       if (keepBadge.checked) {
         const badge = badgeInput.value.trim().toLocaleUpperCase("pt-BR");
-        if (badge) localStorage.setItem(savedBadgeKey, badge);
+        if (badge) storageSet(savedBadgeKey, badge);
       } else {
-        localStorage.removeItem(savedBadgeKey);
+        storageRemove(savedBadgeKey);
         badgeInput.value = "";
         badgeInput.focus();
       }
@@ -1984,7 +2046,7 @@
 
     badgeInput.addEventListener("input", () => {
       if (keepBadge.checked) {
-        localStorage.setItem(savedBadgeKey, badgeInput.value.trim().toLocaleUpperCase("pt-BR"));
+        storageSet(savedBadgeKey, badgeInput.value.trim().toLocaleUpperCase("pt-BR"));
       }
     });
 
@@ -2004,10 +2066,66 @@
     document.getElementById("plateFilter").addEventListener("change", render);
     document.getElementById("shiftFilter").addEventListener("change", render);
     document.getElementById("typeFilter").addEventListener("change", render);
-    document.getElementById("receiptForm").addEventListener("submit", event => {
+    const receiptForm = document.getElementById("receiptForm");
+
+    function setFieldError(field, hasError) {
+      field.classList.toggle("fieldError", hasError);
+      const fieldContainer = field.closest(".field");
+      if (fieldContainer) fieldContainer.classList.toggle("hasError", hasError);
+      if (hasError) {
+        field.setAttribute("aria-invalid", "true");
+      } else {
+        field.removeAttribute("aria-invalid");
+      }
+    }
+
+    function validateRequiredFields(form) {
+      const invalidFields = [];
+      form.querySelectorAll("[required]").forEach(field => {
+        if (field.disabled || field.closest("[hidden]")) {
+          setFieldError(field, false);
+          return;
+        }
+        const valueIsEmpty = typeof field.value === "string" && !field.value.trim();
+        const hasError = valueIsEmpty || !field.validity.valid;
+        setFieldError(field, hasError);
+        if (hasError) invalidFields.push(field);
+      });
+      return invalidFields;
+    }
+
+    receiptForm.addEventListener("input", event => {
+      if (event.target.matches("[required]")) {
+        const valueIsEmpty = typeof event.target.value === "string" && !event.target.value.trim();
+        setFieldError(event.target, valueIsEmpty || !event.target.validity.valid);
+      }
+    });
+    receiptForm.addEventListener("change", event => {
+      if (event.target.matches("[required]")) {
+        const valueIsEmpty = typeof event.target.value === "string" && !event.target.value.trim();
+        setFieldError(event.target, valueIsEmpty || !event.target.validity.valid);
+      }
+    });
+    receiptForm.addEventListener("submit", event => {
       event.preventDefault();
-      const formData = new FormData(event.currentTarget);
-      const row = Object.fromEntries(formData.entries());
+      const invalidFields = validateRequiredFields(event.currentTarget);
+      if (invalidFields.length) {
+        const firstInvalidField = invalidFields[0];
+        showNotice("PREENCHA OS CAMPOS OBRIGATÓRIOS DESTACADOS EM VERMELHO.");
+        window.setTimeout(() => {
+          if (typeof firstInvalidField.scrollIntoView === "function") {
+            firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+          firstInvalidField.focus({ preventScroll: true });
+        }, 50);
+        return;
+      }
+      const row = {};
+      Array.prototype.forEach.call(event.currentTarget.elements, field => {
+        if (!field.name || field.disabled) return;
+        if ((field.type === "checkbox" || field.type === "radio") && !field.checked) return;
+        row[field.name] = field.value;
+      });
       Object.keys(row).forEach(key => {
         if (typeof row[key] === "string") {
           row[key] = row[key].trim().toLocaleUpperCase("pt-BR");
@@ -2030,22 +2148,28 @@
       } else {
         receipts.unshift(row);
       }
-      persistReceipts();
-      firestoreReceipts.doc(row.id).set(row)
-        .then(() => updateSyncStatus("Dados sincronizados", false))
-        .catch(() => {
-          updateSyncStatus("Sem conexão, dados locais ativos", true);
-          showNotice("Alteração salva neste aparelho. A sincronização será retomada com internet.");
-        });
+      const savedLocally = persistReceipts();
+      if (firestoreReceipts) {
+        firestoreReceipts.doc(row.id).set(row)
+          .then(() => updateSyncStatus("Dados sincronizados", false))
+          .catch(() => {
+            updateSyncStatus("Sem conexão, dados locais ativos", true);
+            showNotice("Alteração salva neste aparelho. A sincronização será retomada com internet.");
+          });
+      } else if (savedLocally) {
+        updateSyncStatus("Dados locais ativos neste aparelho", true);
+      } else {
+        updateSyncStatus("Não foi possível salvar neste navegador", true);
+      }
       const badgeToKeep = keepBadge.checked ? row.badge : "";
       const wasEditing = Boolean(existingRow);
       resetReceiptForm();
       if (badgeToKeep) {
         badgeInput.value = badgeToKeep;
         keepBadge.checked = true;
-        localStorage.setItem(savedBadgeKey, badgeToKeep);
+        storageSet(savedBadgeKey, badgeToKeep);
       } else {
-        localStorage.removeItem(savedBadgeKey);
+        storageRemove(savedBadgeKey);
         badgeInput.value = "";
         keepBadge.checked = false;
       }
