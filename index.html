@@ -666,6 +666,34 @@
     .field.wide { grid-column: 1 / -1; }
     .field > span { color: var(--inkSoft); font-size: 11px; font-weight: 600; }
     .field b { margin-left: 4px; color: var(--danger); }
+    .field.needsEntry > span {
+      width: max-content;
+      max-width: 100%;
+      color: #c92f2f;
+      animation: requiredLabelBlink 3.2s ease-in-out infinite;
+    }
+    .field.needsEntry > span::after {
+      content: "  •  PREENCHER";
+      color: #c92f2f;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .05em;
+    }
+    @keyframes requiredLabelBlink {
+      0%, 58%, 100% {
+        opacity: 1;
+        text-shadow: 0 0 0 rgba(201, 47, 47, 0);
+      }
+      79% {
+        opacity: .58;
+        text-shadow: 0 0 5px rgba(201, 47, 47, .18);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .field.needsEntry > span {
+        animation: none;
+      }
+    }
     .badgeLoginRow {
       grid-column: 1 / -1;
       display: grid;
@@ -1823,6 +1851,7 @@
         badgeInput.value = saved;
         keepBadge.checked = true;
       }
+      refreshFieldAttention(form);
     }
 
     function startNewReceipt() {
@@ -2055,6 +2084,7 @@
       customCarrierField.hidden = !showCustomCarrier;
       customCarrierInput.required = showCustomCarrier;
       if (!showCustomCarrier && clearWhenHidden) customCarrierInput.value = "";
+      setFieldAttention(customCarrierInput);
     }
 
     carrierSelect.addEventListener("change", updateCustomCarrierField);
@@ -2067,6 +2097,21 @@
     document.getElementById("shiftFilter").addEventListener("change", render);
     document.getElementById("typeFilter").addEventListener("change", render);
     const receiptForm = document.getElementById("receiptForm");
+
+    function fieldNeedsEntry(field) {
+      if (!field.required || field.disabled || field.closest("[hidden]")) return false;
+      const valueIsEmpty = typeof field.value === "string" && !field.value.trim();
+      return valueIsEmpty || !field.validity.valid;
+    }
+
+    function setFieldAttention(field) {
+      const fieldContainer = field.closest(".field");
+      if (fieldContainer) fieldContainer.classList.toggle("needsEntry", fieldNeedsEntry(field));
+    }
+
+    function refreshFieldAttention(form) {
+      form.querySelectorAll("[required]").forEach(setFieldAttention);
+    }
 
     function setFieldError(field, hasError) {
       field.classList.toggle("fieldError", hasError);
@@ -2096,12 +2141,14 @@
 
     receiptForm.addEventListener("input", event => {
       if (event.target.matches("[required]")) {
+        setFieldAttention(event.target);
         const valueIsEmpty = typeof event.target.value === "string" && !event.target.value.trim();
         setFieldError(event.target, valueIsEmpty || !event.target.validity.valid);
       }
     });
     receiptForm.addEventListener("change", event => {
       if (event.target.matches("[required]")) {
+        setFieldAttention(event.target);
         const valueIsEmpty = typeof event.target.value === "string" && !event.target.value.trim();
         setFieldError(event.target, valueIsEmpty || !event.target.validity.valid);
       }
@@ -2173,10 +2220,11 @@
         badgeInput.value = "";
         keepBadge.checked = false;
       }
-      changeView(wasEditing ? "records" : "dashboard");
+      changeView(wasEditing ? "records" : "form");
       showNotice(wasEditing ? "Registro atualizado com sucesso." : "Recebimento registrado com sucesso.");
     });
 
+    refreshFieldAttention(receiptForm);
     render();
     initFirebaseSync();
   </script>
